@@ -21,12 +21,12 @@ CreateConstantBuffer(&TYPE##Buffer, sizeof(TYPE));
 #define DECLARE_SET_CONSTANT_BUFFER_FUNC(TYPE) \
 	void SetConstantBuffer(const TYPE& Data)\
 	{\
-		ConstantBufferSet(TYPE##Buffer, TYPE##Slot, TYPE##IsVS, TYPE##IsPS);	\
+		ConstantBufferSet(TYPE##Buffer, TYPE##Slot, TYPE##IsVS, TYPE##IsPS, TYPE##IsCS);	\
 	}
 #define DECLARE_SET_UPDATE_CONSTANT_BUFFER_FUNC(TYPE) \
 	void SetAndUpdateConstantBuffer(const TYPE& Data)	\
 	{\
-		ConstantBufferSetUpdate(TYPE##Buffer, Data, TYPE##Slot, TYPE##IsVS, TYPE##IsPS);	\
+		ConstantBufferSetUpdate(TYPE##Buffer, Data, TYPE##Slot, TYPE##IsVS, TYPE##IsPS, TYPE##IsCS);	\
 	}
 
 
@@ -116,13 +116,13 @@ public:
 		DeviceContext->Unmap(ConstantBuffer, 0);
 	}
 	template <typename T>
-	void ConstantBufferSetUpdate(ID3D11Buffer* ConstantBuffer, T& Data, const uint32 Slot, const bool bIsVS, const bool bIsPS)
+	void ConstantBufferSetUpdate(ID3D11Buffer* ConstantBuffer, T& Data, const uint32 Slot, const bool bIsVS, const bool bIsPS, const bool bIsCS)
 	{
 		ConstantBufferUpdate(ConstantBuffer, Data);
-		ConstantBufferSet(ConstantBuffer, Slot, bIsVS, bIsPS);
+		ConstantBufferSet(ConstantBuffer, Slot, bIsVS, bIsPS, bIsCS);
 		
 	}
-	void ConstantBufferSet(ID3D11Buffer* ConstantBuffer, uint32 Slot, bool bIsVS, bool bIsPS);
+	void ConstantBufferSet(ID3D11Buffer* ConstantBuffer, uint32 Slot, bool bIsVS, bool bIsPS, bool bIsCS);
     void UpdateUVScrollConstantBuffers(const FVector2D& Speed, float TimeSec);
 	
 	void IASetPrimitiveTopology();

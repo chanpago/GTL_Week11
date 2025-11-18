@@ -35,6 +35,14 @@ public:
     void UpdateVertexBuffer(const TArray<FNormalVertex>& SkinnedVertices, ID3D11Buffer* InVertexBuffer);
     void CreateStructuredBuffer(ID3D11Buffer** InStructuredBuffer, ID3D11ShaderResourceView** InShaderResourceView, UINT ElementCount);
 
+    // 추후 D3D11RHI에 옮기면 좋을듯
+    void CreateCSInputBuffer(ID3D11Buffer** InStructuredBuffer, ID3D11ShaderResourceView** InShaderResourceView, UINT InElementCount);
+    void CreateCSOutputBuffer(
+        ID3D11Buffer** InStructuredBuffer,
+        ID3D11UnorderedAccessView** InUnorderedAccessView,
+        ID3D11ShaderResourceView** InShaderResourceView,
+        UINT InElementCount);
+
     void BuildLocalAABBs();
     const TArray<FAABB>& GetLocalAABBs() const { return BoneLocalAABBs; }
     

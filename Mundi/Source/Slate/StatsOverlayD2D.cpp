@@ -408,7 +408,7 @@ void UStatsOverlayD2D::Draw()
 			SkeletalAABB
 		);
 
-		const float SkinningPanelHeight = 180.0f;
+		const float SkinningPanelHeight = 240.0f;
 		D2D1_RECT_F rc = D2D1::RectF(Margin, NextY, Margin + PanelWidth + 50.0f, NextY + SkinningPanelHeight);
 
 		DrawTextBlock(

@@ -521,13 +521,13 @@ void FSceneRenderer::RenderShadowDepthPass(FShadowRenderRequest& ShadowRequest, 
 			CurrentTopology = Batch.PrimitiveTopology;
 		}
 
-		if (Batch.GPUSkinMatrixSRV != CurrentSkinMatrixSRV || Batch.GPUSkinNormalMatrixSRV != CurrentSkinNormalMatrixSRV)
+		if (Batch.ComputeShaderSkinMatrixSRV != CurrentSkinMatrixSRV || Batch.VertexShaderSkinNormalMatrixSRV != CurrentSkinNormalMatrixSRV)
 		{
-			ID3D11ShaderResourceView* SkinSRVs[2] = { Batch.GPUSkinMatrixSRV, Batch.GPUSkinNormalMatrixSRV};
+			ID3D11ShaderResourceView* SkinSRVs[2] = { Batch.ComputeShaderSkinMatrixSRV, Batch.VertexShaderSkinNormalMatrixSRV};
 			RHIDevice->GetDeviceContext()->VSSetShaderResources(12, 2, SkinSRVs);
 
-			CurrentSkinMatrixSRV = Batch.GPUSkinMatrixSRV;
-			CurrentSkinNormalMatrixSRV = Batch.GPUSkinNormalMatrixSRV;
+			CurrentSkinMatrixSRV = Batch.ComputeShaderSkinMatrixSRV;
+			CurrentSkinNormalMatrixSRV = Batch.VertexShaderSkinNormalMatrixSRV;
 		}
 
 		// 오브젝트별 World 행렬 설정 (VS에서 필요)
@@ -806,9 +806,7 @@ void FSceneRenderer::GatherVisibleProxies()
 	}
 
 	UPDATE_SKINNING_STATS(Proxies.Meshes)
-	UPDATE_SKINNING_TYPE(World->GetRenderSettings().IsShowFlagEnabled(EEngineShowFlags::SF_GPUSkinning))
-	//FSkinningStatManager::GetInstance().GatherSkinnningStats(Proxies.Meshes);
-	//FSkinningStatManager::GetInstance().UpdateSkinningType(World->GetRenderSettings().IsShowFlagEnabled(EEngineShowFlags::SF_GPUSkinning));
+	UPDATE_SKINNING_TYPE(World->GetRenderSettings().GetShowFlags())
 
 	ShadowStats.CalculateTotal();
 	FShadowStatManager::GetInstance().UpdateStats(ShadowStats);
@@ -900,6 +898,10 @@ void FSceneRenderer::RenderOpaquePass(EViewMode InRenderViewMode)
 	for (UMeshComponent* MeshComponent : Proxies.Meshes)
 	{
 		MeshComponent->CollectMeshBatches(MeshBatchElements, View);
+		if (USkinnedMeshComponent* SkinnedComp = Cast<USkinnedMeshComponent>(MeshComponent))
+		{
+			SkinnedComp->DispatchGPUSkinning(RHIDevice);
+		}
 	}
 
 	for (UBillboardComponent* BillboardComponent : Proxies.Billboards)
@@ -1322,8 +1324,8 @@ void FSceneRenderer::DrawMeshBatches(TArray<FMeshBatchElement>& InMeshBatches, b
 	D3D11_PRIMITIVE_TOPOLOGY CurrentTopology = D3D11_PRIMITIVE_TOPOLOGY_UNDEFINED;
 	// GPU 스키닝
 	ID3D11ShaderResourceView* CurrentSkinMatrixSRV = nullptr;
-	ID3D11ShaderResourceView* CurrentSkinNormalMatrixSRV = nullptr;
-	RHIDevice->GetDeviceContext()->VSSetShaderResources(12, 2, nullSRVs);
+	ID3D11ShaderResourceView* CurrentSkinNormalMatrixSRV = nullptr;	
+	ID3D11ShaderResourceView* CurrentSkinnedVerticesSRV = nullptr;
 
 	// 기본 샘플러 미리 가져오기 (루프 내 반복 호출 방지)
 	ID3D11SamplerState* DefaultSampler = RHIDevice->GetSamplerState(RHI_Sampler_Index::Default);
@@ -1335,7 +1337,7 @@ void FSceneRenderer::DrawMeshBatches(TArray<FMeshBatchElement>& InMeshBatches, b
 	for (const FMeshBatchElement& Batch : InMeshBatches)
 	{
 		// --- 필수 요소 유효성 검사 ---
-		if (!Batch.VertexShader || !Batch.PixelShader || !Batch.VertexBuffer || !Batch.IndexBuffer || Batch.VertexStride == 0)
+		if (!Batch.VertexShader || !Batch.PixelShader || /*!Batch.VertexBuffer ||*/ !Batch.IndexBuffer /*|| Batch.VertexStride == 0*/)
 		{
 			// 셰이더나 버퍼, 스트라이드 정보가 없으면 그릴 수 없음
 			//UE_LOG("[%s] 머티리얼에 셰이더가 컴파일에 실패했거나 없습니다!", Batch.Material->GetFilePath().c_str());	// NOTE: 로그가 매 프레임 떠서 셰이더 컴파일 에러 로그를 볼 수 없어서 주석 처리
@@ -1424,16 +1426,27 @@ void FSceneRenderer::DrawMeshBatches(TArray<FMeshBatchElement>& InMeshBatches, b
 			CurrentInstanceSRV = Batch.InstanceShaderResourceView;
 		}
 
-		if (Batch.GPUSkinMatrixSRV != CurrentSkinMatrixSRV || Batch.GPUSkinNormalMatrixSRV != CurrentSkinNormalMatrixSRV)
+		uint8 bIsGPUSkinning = 0x00;
+		if (Batch.ComputeShaderSkinMatrixSRV && (Batch.ComputeShaderSkinMatrixSRV != CurrentSkinnedVerticesSRV))
+		{
+			ID3D11ShaderResourceView* SkinnedSRV[] = { Batch.ComputeShaderSkinMatrixSRV };
+			
+			RHIDevice->GetDeviceContext()->VSSetShaderResources(12, 1, SkinnedSRV);
+			CurrentSkinnedVerticesSRV = Batch.ComputeShaderSkinMatrixSRV;
+			bIsGPUSkinning = 0x01;
+		}
+		else if (Batch.VertexShaderSkinMatrixSRV != CurrentSkinMatrixSRV || Batch.VertexShaderSkinNormalMatrixSRV != CurrentSkinNormalMatrixSRV)
 		{
 			// t12, t13
-			ID3D11ShaderResourceView* SkinSRVs[2] = {Batch.GPUSkinMatrixSRV, Batch.GPUSkinNormalMatrixSRV};
-
+			ID3D11ShaderResourceView* SkinSRVs[2] = {Batch.VertexShaderSkinMatrixSRV, Batch.VertexShaderSkinNormalMatrixSRV};
+		
 			RHIDevice->GetDeviceContext()->VSSetShaderResources(12, 2, SkinSRVs);
+		
+			CurrentSkinMatrixSRV = Batch.VertexShaderSkinMatrixSRV;
+			CurrentSkinNormalMatrixSRV = Batch.VertexShaderSkinNormalMatrixSRV;
+			bIsGPUSkinning = 0x02;
+		}		
 
-			CurrentSkinMatrixSRV = Batch.GPUSkinMatrixSRV;
-			CurrentSkinNormalMatrixSRV = Batch.GPUSkinNormalMatrixSRV;
-		}
 
 		// 3. IA (Input Assembler) 상태 변경
 		if (Batch.VertexBuffer != CurrentVertexBuffer ||
@@ -1464,6 +1477,17 @@ void FSceneRenderer::DrawMeshBatches(TArray<FMeshBatchElement>& InMeshBatches, b
 
 		// 5. 드로우 콜 실행
 		RHIDevice->GetDeviceContext()->DrawIndexed(Batch.IndexCount, Batch.StartIndex, Batch.BaseVertexIndex);
+
+		// CS Skinning
+		if (bIsGPUSkinning & 0x01)
+		{
+			RHIDevice->GetDeviceContext()->VSSetShaderResources(12, 1, nullSRVs);
+		}
+		// VS Skinning
+		else if (bIsGPUSkinning & 0x02)
+		{
+			RHIDevice->GetDeviceContext()->VSSetShaderResources(12, 2, nullSRVs);
+		}
 	}
 
 	// 루프 종료 후 리스트 비우기 (옵션)

@@ -285,9 +285,19 @@ void SViewportWindow::RenderToolbar()
 		float CursorStartX = ImGui::GetCursorPosX();
 		ImVec2 CurrentCursor = ImGui::GetCursorPos();
 
-		const char* SkinningLabel = "GPU Skinning";
-		ImVec2 SkinningTextSize = ImGui::CalcTextSize(SkinningLabel);
-		const float SkinningButtonWidth = SkinningTextSize.x + 30.0f;
+		const char* SkinningModeName = "CPU";
+		if (ViewportClient && ViewportClient->GetWorld())
+		{
+			URenderSettings& RS = ViewportClient->GetWorld()->GetRenderSettings();
+			if (RS.IsShowFlagEnabled(EEngineShowFlags::SF_ComputeSkinning)) SkinningModeName = "GPU Compute";
+			else if (RS.IsShowFlagEnabled(EEngineShowFlags::SF_VertexSkinning)) SkinningModeName = "GPU Vertex";
+		}
+
+		char SkinningText[64];
+		sprintf_s(SkinningText, "%s %s", SkinningModeName, "v");
+		ImVec2 SkinningTextSize = ImGui::CalcTextSize(SkinningText);
+		// 아이콘이 없으니까 17.0f + 4.0f 제거
+		const float SkinningButtonWidth = /*17.0f + 4.0f +*/ SkinningTextSize.x + 16.0f;
 
 		// 오른쪽부터 역순으로 위치 계산
 		// Switch는 오른쪽 끝
@@ -2014,16 +2024,174 @@ void SViewportWindow::RenderGPUSkinningButton()
 		return;
 	}
 	URenderSettings& RenderSettings = ViewportClient->GetWorld()->GetRenderSettings();
-	bool bGPUSkinning = RenderSettings.IsShowFlagEnabled(EEngineShowFlags::SF_GPUSkinning);
+	const bool bComputeSkinning = RenderSettings.IsShowFlagEnabled(EEngineShowFlags::SF_ComputeSkinning);
+	const bool bVertexSkinning = RenderSettings.IsShowFlagEnabled(EEngineShowFlags::SF_VertexSkinning);
 
-	ImGui::PushStyleColor(ImGuiCol_FrameBg, ImVec4(0.25f, 0.30f, 0.35f, 0.8f));
-	if (ImGui::Checkbox("##GPUSkinning", &bGPUSkinning))
-	{
-		RenderSettings.ToggleShowFlag(EEngineShowFlags::SF_GPUSkinning);
-	}
-	ImGui::SameLine();
-	ImGui::TextUnformatted("GPU Skinning");
-	ImGui::PopStyleColor();
+	// 아이콘 크기 및 위치 조정
+    ImVec2 cursorPos = ImGui::GetCursorPos();
+    ImGui::SetCursorPosY(cursorPos.y - 1.0f);
+    const ImVec2 IconSize(17, 17);
+
+    // 2. 현재 모드 이름 및 아이콘 결정
+    const char* CurrentModeName = "CPU";
+    UTexture* CurrentModeIcon = nullptr; // TODO: 스키닝 관련 아이콘이 있다면 여기에 할당 (예: IconSkinning_CPU)
+
+    if (bComputeSkinning)
+    {
+        CurrentModeName = "GPU Compute";
+        // CurrentModeIcon = IconSkinning_Compute; 
+    }
+    else if (bVertexSkinning)
+    {
+        CurrentModeName = "GPU Vertex";
+        // CurrentModeIcon = IconSkinning_Vertex;
+    }
+    else
+    {
+        CurrentModeName = "CPU";
+        // CurrentModeIcon = IconSkinning_CPU;
+    }
+
+    // 3. 드롭다운 버튼 텍스트 및 너비 계산
+    char ButtonText[64];
+    sprintf_s(ButtonText, "%s %s", CurrentModeName, "∨");
+
+    ImVec2 TextSize = ImGui::CalcTextSize(ButtonText);
+    const float Padding = 8.0f;
+    // 아이콘이 없으면 너비에서 제외, 있으면 포함
+    float IconWidthSpace = (CurrentModeIcon) ? (IconSize.x + 4.0f) : 0.0f;
+    const float DropdownWidth = IconWidthSpace + TextSize.x + Padding * 2.0f;
+
+    // 4. 버튼 스타일 적용
+    ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 4.0f);
+    ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.14f, 0.16f, 0.16f, 1.00f));
+    ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.18f, 0.22f, 0.21f, 1.00f));
+    ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.22f, 0.28f, 0.26f, 1.00f));
+
+    ImVec2 ButtonSize(DropdownWidth, ImGui::GetFrameHeight());
+    ImVec2 ButtonCursorPos = ImGui::GetCursorPos();
+
+    // 5. 버튼 그리기
+    if (ImGui::Button("##SkinningModeBtn", ButtonSize))
+    {
+        ImGui::OpenPopup("SkinningModePopup");
+    }
+
+    if (ImGui::IsItemHovered())
+    {
+        ImGui::SetTooltip("스키닝 모드 선택");
+    }
+
+    // 6. 버튼 위에 내용 렌더링 (아이콘 + 텍스트 중앙 정렬)
+    float ButtonContentWidth = IconWidthSpace + TextSize.x;
+    float ButtonContentStartX = ButtonCursorPos.x + (ButtonSize.x - ButtonContentWidth) * 0.5f;
+    ImVec2 ButtonContentCursorPos = ImVec2(ButtonContentStartX, ButtonCursorPos.y + (ButtonSize.y - IconSize.y) * 0.5f);
+    ImGui::SetCursorPos(ButtonContentCursorPos);
+
+    // 아이콘 그리기 (있을 경우)
+    if (CurrentModeIcon && CurrentModeIcon->GetShaderResourceView())
+    {
+        ImGui::Image((void*)CurrentModeIcon->GetShaderResourceView(), IconSize);
+        ImGui::SameLine(0, 4);
+    }
+    // 텍스트 그리기 (Y축 중앙 정렬 보정)
+    ImGui::SetCursorPosY(ButtonCursorPos.y + (ButtonSize.y - TextSize.y) * 0.5f); 
+    // 아이콘이 있으면 X축은 SameLine에 의해 조정됨, 없으면 직접 설정
+    if (!CurrentModeIcon) 
+    {
+        ImGui::SetCursorPosX(ButtonContentStartX);
+    }
+    ImGui::Text("%s", ButtonText);
+
+    ImGui::PopStyleColor(3);
+    ImGui::PopStyleVar(1);
+
+    // 7. 팝업 메뉴 렌더링
+    if (ImGui::BeginPopup("SkinningModePopup", ImGuiWindowFlags_NoMove))
+    {
+        ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(8, 4));
+        ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(8, 8));
+
+        // 선택된 항목 배경 제거 스타일
+        ImGui::PushStyleColor(ImGuiCol_Header, ImVec4(0, 0, 0, 0));
+        ImGui::PushStyleColor(ImGuiCol_HeaderHovered, ImVec4(0.2f, 0.2f, 0.2f, 0.5f));
+        ImGui::PushStyleColor(ImGuiCol_HeaderActive, ImVec4(0.3f, 0.3f, 0.3f, 0.6f));
+
+        ImGui::TextColored(ImVec4(0.6f, 0.6f, 0.6f, 1.0f), "스키닝 모드");
+        ImGui::Separator();
+
+        // --- 헬퍼 람다: 메뉴 아이템 그리기 ---
+        auto DrawSkinningMenuItem = [&](const char* Label, bool bIsSelected, UTexture* Icon, const char* Tooltip) -> bool
+        {
+            const char* RadioIcon = bIsSelected ? "●" : "○";
+            
+            // 전체 호버 영역 확보
+            ImVec2 ItemCursorPos = ImGui::GetCursorScreenPos();
+            ImVec2 SelectableSize(160, IconSize.y + 2.0f); // 너비 조절 가능
+
+        	char HiddenLabal[64];
+        	sprintf_s(HiddenLabal, "##%s", Label);
+
+            // 투명 Selectable (클릭 감지용)
+            bool bClicked = ImGui::Selectable(HiddenLabal, false, ImGuiSelectableFlags_AllowItemOverlap, SelectableSize);
+
+            // 호버링 툴팁
+            if (ImGui::IsItemHovered() && Tooltip)
+            {
+                ImGui::SetTooltip("%s", Tooltip);
+            }
+
+            // 위에 덮어 그리기 (라디오 + 아이콘 + 텍스트)
+            ImGui::SetCursorScreenPos(ItemCursorPos);
+            
+            // 1. 라디오 버튼 텍스트
+            ImGui::Text("%s", RadioIcon);
+            ImGui::SameLine(0, 6);
+
+            // 2. 아이콘 (있다면)
+            if (Icon && Icon->GetShaderResourceView())
+            {
+                ImGui::Image((void*)Icon->GetShaderResourceView(), IconSize);
+                ImGui::SameLine(0, 4);
+            }
+
+            // 3. 라벨 텍스트
+            ImGui::Text("%s", Label); // Label 문자열의 "##" 뒤쪽은 숨겨지므로 주의 (여기선 Label을 ## 없이 넘김)
+
+            return bClicked;
+        };
+
+        // --- 메뉴 아이템들 ---
+
+        // 1. CPU
+        bool bIsCPU = !bComputeSkinning && !bVertexSkinning;
+        if (DrawSkinningMenuItem("CPU", bIsCPU, nullptr, "CPU에서 스키닝을 수행합니다."))
+        {
+            RenderSettings.DisableShowFlag(EEngineShowFlags::SF_ComputeSkinning);
+            RenderSettings.DisableShowFlag(EEngineShowFlags::SF_VertexSkinning);
+            ImGui::CloseCurrentPopup();
+        }
+
+        // 2. GPU Vertex
+        if (DrawSkinningMenuItem("GPU Vertex", bVertexSkinning, nullptr, "Vertex Shader에서 스키닝을 수행합니다."))
+        {
+            RenderSettings.EnableShowFlag(EEngineShowFlags::SF_VertexSkinning);
+            RenderSettings.DisableShowFlag(EEngineShowFlags::SF_ComputeSkinning);
+            ImGui::CloseCurrentPopup();
+        }
+
+        // 3. GPU Compute
+        if (DrawSkinningMenuItem("GPU Compute", bComputeSkinning, nullptr, "Compute Shader를 사용하여 스키닝합니다."))
+        {
+            RenderSettings.EnableShowFlag(EEngineShowFlags::SF_ComputeSkinning);
+            RenderSettings.DisableShowFlag(EEngineShowFlags::SF_VertexSkinning);
+            ImGui::CloseCurrentPopup();
+        }
+
+        ImGui::PopStyleColor(3);
+        ImGui::PopStyleVar(2);
+        ImGui::EndPopup();
+    }
 }
 
 void SViewportWindow::HandleDropTarget()

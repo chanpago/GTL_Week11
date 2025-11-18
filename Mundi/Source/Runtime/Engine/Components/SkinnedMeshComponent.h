@@ -27,7 +27,10 @@ public:
     FAABB GetWorldAABB() const override;
     void OnTransformUpdated() override;
 
-    bool IsGPUSkinningEnable() const { return bForceGPUSkinning; }    
+    bool IsGPUSkinningEnable() const { return bComputeShaderSkinning; }
+
+    // Compute Shader
+    void DispatchGPUSkinning(D3D11RHI* RHIDevice);
 
 // Skeletal Section
 public:
@@ -52,7 +55,8 @@ protected:
     UPROPERTY(EditAnywhere, Category = "Skeletal Mesh", Tooltip = "Skeletal mesh asset to render")
     USkeletalMesh* SkeletalMesh;
 
-    bool bForceGPUSkinning = false;
+    bool bComputeShaderSkinning = false;
+    bool bVertexShaderSkinning = false;
 
     /**
      * @brief CPU 스키닝 최종 결과물. 렌더러가 이 데이터를 사용합니다.
@@ -67,6 +71,7 @@ private:
     FVector SkinVertexPosition(const FSkinnedVertex& InVertex) const;
     FVector SkinVertexNormal(const FSkinnedVertex& InVertex) const;
     FVector4 SkinVertexTangent(const FSkinnedVertex& InVertex) const;
+    void InitializeGPUSkinningResource();
 
     /**
      * @brief 자식이 계산해 준, 현재 프레임의 최종 스키닝 행렬
@@ -80,8 +85,20 @@ private:
     */
     ID3D11Buffer* CPUSkinnedVertexBuffer = nullptr;
     ID3D11Buffer* GPUSkinnedVertexBuffer = nullptr;
+    
     ID3D11Buffer* SkinningMatrixBuffer = nullptr;
     ID3D11Buffer* SkinningNormalMatrixBuffer = nullptr;
-    ID3D11ShaderResourceView* SkinningMatrixSRV = nullptr;
-    ID3D11ShaderResourceView* SkinningNormalMatrixSRV = nullptr;
+    ID3D11ShaderResourceView* SkinningMatrixSRV = nullptr; // t1
+    ID3D11ShaderResourceView* SkinningNormalMatrixSRV = nullptr; // t2
+
+    ID3D11Buffer* CSVertexBuffer = nullptr;
+    ID3D11ShaderResourceView* CSVertexSRV = nullptr; // t0
+
+    ID3D11Buffer* CSOutputBuffer = nullptr;
+    ID3D11UnorderedAccessView* CSOutputVertexUAV = nullptr; // u0;
+    // CS의 계산 결과를 VS에 입력으로 주는 SRV
+    ID3D11ShaderResourceView* CSOutVertexSRV = nullptr;
+    UShader* SkinningCS = nullptr;
+
+    bool bIsResourcePrepare = false;
 };

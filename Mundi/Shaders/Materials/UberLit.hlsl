@@ -9,9 +9,14 @@
 // #define LIGHTING_MODEL_LAMBERT 1
 // #define LIGHTING_MODEL_PHONG 1
 
-#ifndef USE_GPU_SKINNING
-#define USE_GPU_SKINNING 0
+#ifndef USE_COMPUTE_SKINNING
+#define USE_COMPUTE_SKINNING 0
 #endif
+
+#ifndef USE_VERTEX_SKINNING
+#define USE_VERTEX_SKINNING 0
+#endif
+
 
 // --- Material 구조체 (OBJ 머티리얼 정보) ---
 // 주의: SPECULAR_COLOR 매크로에서 사용하므로 include 전에 정의 필요
@@ -90,22 +95,21 @@ Texture2D g_ShadowAtlas2D : register(t9);
 Texture2D<float2> g_VSMShadowAtlas : register(t10);
 TextureCubeArray<float2> g_VSMShadowCube : register(t11);   // TODO: 지금은 전달 안 되고, 안 쓰는 중
 
-#if USE_GPU_SKINNING
+
+#if USE_COMPUTE_SKINNING
+struct FSkinnedVertexInput
+{
+    float3 Position;
+    float3 Normal;
+    float2 TexCoord;
+    float4 Tangent;
+    float4 Color;
+};
+StructuredBuffer<FSkinnedVertexInput> g_SkinnedVertices : register(t12);
+#elif USE_VERTEX_SKINNING
 StructuredBuffer<float4x4> g_SkinnedMatrices : register(t12);
 StructuredBuffer<float4x4> g_SkinnedNormalMatrices : register(t13);
-#endif
 
-SamplerState g_Sample : register(s0);
-SamplerState g_Sample2 : register(s1);
-SamplerComparisonState g_ShadowSample : register(s2);
-SamplerState g_VSMSampler : register(s3);
-
-// --- 공통 조명 시스템 include ---
-#include "../Common/LightStructures.hlsl"
-#include "../Common/LightingBuffers.hlsl"
-#include "../Common/LightingCommon.hlsl"
-
-#if USE_GPU_SKINNING
 float3 SkinPosition(float3 Position, uint4 BoneIndices, float4 BoneWeights)
 {
     float4 SkinnedPos = 0.0f;
@@ -137,20 +141,40 @@ float3 SkinVector(float3 Vector, uint4 BoneIndices, float4 BoneWeights, Structur
 
     return normalize(SkinnedVector);
 }
+
 #endif
+
+SamplerState g_Sample : register(s0);
+SamplerState g_Sample2 : register(s1);
+SamplerComparisonState g_ShadowSample : register(s2);
+SamplerState g_VSMSampler : register(s3);
+
+// --- 공통 조명 시스템 include ---
+#include "../Common/LightStructures.hlsl"
+#include "../Common/LightingBuffers.hlsl"
+#include "../Common/LightingCommon.hlsl"
+
 
 // --- 셰이더 입출력 구조체 ---
 struct VS_INPUT
 {
+#if USE_COMPUTE_SKINNING    
+    // Compute Shader Skinning은 입력이 없다
+#elif USE_VERTEX_SKINNING
     float3 Position : POSITION;
     float3 Normal : NORMAL0;
     float2 TexCoord : TEXCOORD0;
     float4 Tangent : TANGENT0;
     float4 Color : COLOR;
-#if USE_GPU_SKINNING
     uint4 BoneIndices : BLENDINDICES0;
     float4 BoneWeights : BLENDWEIGHT0;
-#endif        
+#else
+    float3 Position : POSITION;
+    float3 Normal : NORMAL0;
+    float2 TexCoord : TEXCOORD0;
+    float4 Tangent : TANGENT0;
+    float4 Color : COLOR;
+#endif    
 };
 
 struct PS_INPUT
@@ -172,18 +196,46 @@ struct PS_OUTPUT
 //================================================================================================
 // 버텍스 셰이더 (Vertex Shader)
 //================================================================================================
-PS_INPUT mainVS(VS_INPUT Input)
+PS_INPUT mainVS(
+#if USE_COMPUTE_SKINNING
+    // Compute Shader Skinning은 Input이 없음
+    uint VertexID : SV_VertexID
+#else
+    // 추후 확장 고려해서 VertexID 포함
+    VS_INPUT Input, uint VertexID : SV_VertexID
+#endif
+)
 {
     PS_INPUT Out;
 
-#if USE_GPU_SKINNING
-    float3 ModelPosition = SkinPosition(Input.Position, Input.BoneIndices, Input.BoneWeights);
-    float3 ModelNormal = SkinVector(Input.Normal, Input.BoneIndices, Input.BoneWeights, g_SkinnedNormalMatrices);
-    float3 ModelTangent = SkinVector(Input.Tangent.xyz, Input.BoneIndices, Input.BoneWeights, g_SkinnedMatrices);
+    float3 ModelPosition;
+    float3 ModelNormal;
+    float3 ModelTangent;
+    float2 ModelTexCoord;
+    float4 ModelColor;
+    float TangentW;
+#if USE_COMPUTE_SKINNING
+    FSkinnedVertexInput SkinnedInput = g_SkinnedVertices[VertexID];
+    ModelPosition = SkinnedInput.Position;
+    ModelNormal = SkinnedInput.Normal;
+    ModelTangent = SkinnedInput.Tangent.xyz;
+    ModelTexCoord = SkinnedInput.TexCoord;
+    ModelColor = SkinnedInput.Color;
+    TangentW = SkinnedInput.Tangent.w;
+#elif USE_VERTEX_SKINNING
+    ModelPosition = SkinPosition(Input.Position, Input.BoneIndices, Input.BoneWeights);
+    ModelNormal = SkinVector(Input.Normal, Input.BoneIndices, Input.BoneWeights, g_SkinnedNormalMatrices);
+    ModelTangent = SkinVector(Input.Tangent.xyz, Input.BoneIndices, Input.BoneWeights, g_SkinnedMatrices);
+    ModelTexCoord = Input.TexCoord;
+    ModelColor = Input.Color;
+    TangentW = Input.Tangent.w;
 #else
-    float3 ModelPosition = Input.Position.xyz;
-    float3 ModelNormal = Input.Normal.xyz;
-    float3 ModelTangent = Input.Tangent.xyz;
+    ModelPosition = Input.Position;
+    ModelNormal = Input.Normal;
+    ModelTangent = Input.Tangent.xyz;
+    ModelTexCoord = Input.TexCoord;
+    ModelColor = Input.Color;
+    TangentW = Input.Tangent.w;
 #endif
 
     float4 WorldPos = mul(float4(ModelPosition, 1.0f), WorldMatrix);
@@ -196,7 +248,7 @@ PS_INPUT mainVS(VS_INPUT Input)
     Out.Normal = WorldNormal;
 
     float3 Tangent = normalize(mul(ModelTangent, (float3x3)WorldMatrix));
-    float3 BiTangent = normalize(cross(WorldNormal, Tangent) * Input.Tangent.w);
+    float3 BiTangent = normalize(cross(WorldNormal, Tangent) * TangentW);
     row_major float3x3 TBN;
     TBN._m00_m01_m02 = Tangent;
     TBN._m10_m11_m12 = BiTangent;
@@ -204,7 +256,7 @@ PS_INPUT mainVS(VS_INPUT Input)
 
     Out.TBN = TBN;
 
-    Out.TexCoord = Input.TexCoord;
+    Out.TexCoord = ModelTexCoord;
 
     // 머티리얼의 SpecularExponent 사용, 머티리얼이 없으면 기본값 사용
     float specPower = bHasMaterial ? Material.SpecularExponent : 32.0f;
@@ -217,7 +269,7 @@ PS_INPUT mainVS(VS_INPUT Input)
     float3 viewDir = normalize(CameraPosition - Out.WorldPos);
 
     // 베이스 색상 결정 (일관성을 위해 Lambert/Phong과 동일한 로직)
-    float4 baseColor = Input.Color;
+    float4 baseColor = ModelColor;
     if (bHasMaterial)
     {
         // 머티리얼 diffuse 색상 사용
@@ -239,14 +291,14 @@ PS_INPUT mainVS(VS_INPUT Input)
     // Directional light (diffuse + specular) - 그림자 제외
     FDirectionalLightInfo dirLightNoShadow = DirectionalLight;
     dirLightNoShadow.bCastShadows = 0;
-    finalColor += CalculateDirectionalLight(dirLightNoShadow, Out.WorldPos, viewPos.xyz, worldNormal, viewDir, baseColor, true, specPower, g_ShadowAtlas2D, g_ShadowSample);
+    finalColor += CalculateDirectionalLight(dirLightNoShadow, Out.WorldPos, ViewPos.xyz, WorldNormal, viewDir, baseColor, true, specPower, g_ShadowAtlas2D, g_ShadowSample);
 
     // Point lights (diffuse + specular) - 그림자 제외
     for (int i = 0; i < PointLightCount; i++)
     {
         FPointLightInfo pointLightNoShadow = g_PointLightList[i];
         pointLightNoShadow.bCastShadows = 0;
-        finalColor += CalculatePointLight(pointLightNoShadow, Out.WorldPos, worldNormal, viewDir, baseColor, true, specPower, g_ShadowAtlasCube, g_ShadowSample);
+        finalColor += CalculatePointLight(pointLightNoShadow, Out.WorldPos, WorldNormal, viewDir, baseColor, true, specPower, g_ShadowAtlasCube, g_ShadowSample);
     }
 
     // Spot lights (diffuse + specular) - 그림자 제외
@@ -254,22 +306,22 @@ PS_INPUT mainVS(VS_INPUT Input)
     {
         FSpotLightInfo spotLightNoShadow = g_SpotLightList[j];
         spotLightNoShadow.bCastShadows = 0;
-        finalColor += CalculateSpotLight(spotLightNoShadow, Out.WorldPos, worldNormal, viewDir, baseColor, true, specPower, g_ShadowAtlas2D, g_ShadowSample, g_VSMShadowAtlas, g_VSMSampler);
+        finalColor += CalculateSpotLight(spotLightNoShadow, Out.WorldPos, WorldNormal, viewDir, baseColor, true, specPower, g_ShadowAtlas2D, g_ShadowSample, g_VSMShadowAtlas, g_VSMSampler);
     }
 
     Out.Color = float4(finalColor, baseColor.a);
 
 #elif LIGHTING_MODEL_LAMBERT
     // Lambert Shading: 픽셀별 계산을 위해 픽셀 셰이더로 데이터 전달
-    Out.Color = Input.Color;
+    Out.Color = ModelColor;
 
 #elif LIGHTING_MODEL_PHONG
     // Phong Shading: 픽셀별 계산을 위해 픽셀 셰이더로 데이터 전달
-    Out.Color = Input.Color;
+    Out.Color = ModelColor;
 
 #else
     // 조명 모델 미정의 - 정점 색상을 그대로 전달
-    Out.Color = Input.Color;
+    Out.Color = ModelColor;
 
 #endif
 

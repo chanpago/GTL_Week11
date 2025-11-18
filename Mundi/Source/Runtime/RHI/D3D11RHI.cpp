@@ -332,7 +332,7 @@ HRESULT D3D11RHI::CreateIndexBuffer(ID3D11Device* Device, const FSkeletalMeshDat
     return Device->CreateBuffer(&IndexBufferDesc, &InitData, OutBuffer);
 }
 
-void D3D11RHI::ConstantBufferSet(ID3D11Buffer* ConstantBuffer, uint32 Slot, bool bIsVS, bool bIsPS)
+void D3D11RHI::ConstantBufferSet(ID3D11Buffer* ConstantBuffer, uint32 Slot, bool bIsVS, bool bIsPS, bool bIsCS)
 {
     if (bIsVS)
     {
@@ -341,6 +341,10 @@ void D3D11RHI::ConstantBufferSet(ID3D11Buffer* ConstantBuffer, uint32 Slot, bool
     if (bIsPS)
     {
         DeviceContext->PSSetConstantBuffers(Slot, 1, &ConstantBuffer);
+    }
+    if (bIsCS)
+    {
+        DeviceContext->CSSetConstantBuffers(Slot, 1, &ConstantBuffer);
     }
 }
 

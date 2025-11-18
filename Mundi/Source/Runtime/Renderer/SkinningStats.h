@@ -69,9 +69,18 @@ public:
         CurrentStats.Reset();
     }
 
-    void UpdateSkinningType(bool bEnableGPUSkinning)
+    void UpdateSkinningType(EEngineShowFlags EngineFlags)
     {
-        CurrentStats.SkinningType = bEnableGPUSkinning ? "GPU" : "CPU";
+        FString SkinningType = "CPU";
+        if (HasShowFlag(EngineFlags, EEngineShowFlags::SF_ComputeSkinning))
+        {
+            SkinningType = "GPU_Compute";
+        }
+        else if (HasShowFlag(EngineFlags, EEngineShowFlags::SF_VertexSkinning))
+        {
+            SkinningType = "GPU_Vertex";
+        }
+        CurrentStats.SkinningType = SkinningType;
     }
 
     void GatherSkinnningStats(TArray<UMeshComponent*>& Components)

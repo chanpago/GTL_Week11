@@ -210,10 +210,18 @@ struct FPointLightShadowBufferType
     FVector Padding;                // 16바이트 정렬
 };
 
-#define CONSTANT_BUFFER_INFO(TYPE, SLOT, VS, PS) \
+// Compute Shader b0
+struct FSkinnedVertexCountBuffer
+{
+    uint32 VertexCount;
+    uint32 Padding[3];
+};
+
+#define CONSTANT_BUFFER_INFO(TYPE, SLOT, VS, PS, CS) \
 constexpr uint32 TYPE##Slot = SLOT;\
 constexpr bool TYPE##IsVS = VS;\
-constexpr bool TYPE##IsPS = PS;
+constexpr bool TYPE##IsPS = PS;\
+constexpr bool TYPE##IsCS = CS;\
 
 //매크로를 인자로 받고 그 매크로 함수에 버퍼 전달
 #define CONSTANT_BUFFER_LIST(MACRO) \
@@ -233,7 +241,8 @@ MACRO(CameraBufferType)             \
 MACRO(FLightBufferType)             \
 MACRO(FViewportConstants)           \
 MACRO(FTileCullingBufferType)       \
-MACRO(FPointLightShadowBufferType)
+MACRO(FPointLightShadowBufferType)  \
+MACRO(FSkinnedVertexCountBuffer)
 
 // 16 바이트 패딩 어썰트
 #define STATIC_ASSERT_CBUFFER_ALIGNMENT(Type) \
@@ -242,23 +251,23 @@ CONSTANT_BUFFER_LIST(STATIC_ASSERT_CBUFFER_ALIGNMENT)
 
 //VS, PS 세팅은 함수 파라미터로 결정하게 하는게 훨씬 나을듯 나중에 수정 필요
 //그리고 UV Scroll 상수버퍼도 처리해줘야함
-CONSTANT_BUFFER_INFO(ModelBufferType, 0, true, false)
-CONSTANT_BUFFER_INFO(PostProcessBufferType, 0, false, true)
-CONSTANT_BUFFER_INFO(ViewProjBufferType, 1, true, true) // b1 카메라 행렬 고정
-CONSTANT_BUFFER_INFO(FogBufferType, 2, false, true)
-CONSTANT_BUFFER_INFO(FFadeInOutBufferType, 2, false, true)
-CONSTANT_BUFFER_INFO(FGammaCorrectionBufferType, 2, false, true)
-CONSTANT_BUFFER_INFO(FVinetteBufferType, 2, false, true)
-CONSTANT_BUFFER_INFO(FXAABufferType, 2, false, true)
-CONSTANT_BUFFER_INFO(ColorBufferType, 3, true, true)   // b3 color
-CONSTANT_BUFFER_INFO(FPixelConstBufferType, 4, true, true) // GOURAUD에도 사용되므로 VS도 true
-CONSTANT_BUFFER_INFO(DecalBufferType, 6, true, true)
-CONSTANT_BUFFER_INFO(FireballBufferType, 6, false, true)
-CONSTANT_BUFFER_INFO(CameraBufferType, 7, true, true)  // b7, VS+PS (UberLit.hlsl과 일치)
-CONSTANT_BUFFER_INFO(FLightBufferType, 8, true, true)
-CONSTANT_BUFFER_INFO(FViewportConstants, 10, true, true)   // 뷰 포트 크기에 따라 전체 화면 복사를 보정하기 위해 설정 (10번 고유번호로 사용)
-CONSTANT_BUFFER_INFO(FTileCullingBufferType, 11, false, true)  // b11, PS only (UberLit.hlsl과 일치)
-CONSTANT_BUFFER_INFO(FPointLightShadowBufferType, 12, true, true)  // b11, VS only
-
+CONSTANT_BUFFER_INFO(ModelBufferType, 0, true, false, false)
+CONSTANT_BUFFER_INFO(PostProcessBufferType, 0, false, true, false)
+CONSTANT_BUFFER_INFO(ViewProjBufferType, 1, true, true, false) // b1 카메라 행렬 고정
+CONSTANT_BUFFER_INFO(FogBufferType, 2, false, true, false)
+CONSTANT_BUFFER_INFO(FFadeInOutBufferType, 2, false, true, false)
+CONSTANT_BUFFER_INFO(FGammaCorrectionBufferType, 2, false, true, false)
+CONSTANT_BUFFER_INFO(FVinetteBufferType, 2, false, true, false)
+CONSTANT_BUFFER_INFO(FXAABufferType, 2, false, true, false)
+CONSTANT_BUFFER_INFO(ColorBufferType, 3, true, true, false)   // b3 color
+CONSTANT_BUFFER_INFO(FPixelConstBufferType, 4, true, true, false) // GOURAUD에도 사용되므로 VS도 true
+CONSTANT_BUFFER_INFO(DecalBufferType, 6, true, true, false)
+CONSTANT_BUFFER_INFO(FireballBufferType, 6, false, true, false)
+CONSTANT_BUFFER_INFO(CameraBufferType, 7, true, true, false)  // b7, VS+PS (UberLit.hlsl과 일치)
+CONSTANT_BUFFER_INFO(FLightBufferType, 8, true, true, false)
+CONSTANT_BUFFER_INFO(FViewportConstants, 10, true, true, false)   // 뷰 포트 크기에 따라 전체 화면 복사를 보정하기 위해 설정 (10번 고유번호로 사용)
+CONSTANT_BUFFER_INFO(FTileCullingBufferType, 11, false, true, false)  // b11, PS only (UberLit.hlsl과 일치)
+CONSTANT_BUFFER_INFO(FPointLightShadowBufferType, 12, true, true, false)  // b11, VS only
+CONSTANT_BUFFER_INFO(FSkinnedVertexCountBuffer, 0, false, false, true)  // b0
 
 

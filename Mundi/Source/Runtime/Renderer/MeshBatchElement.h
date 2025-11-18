@@ -63,8 +63,9 @@ struct FMeshBatchElement
 	FLinearColor InstanceColor = FLinearColor(1.0f, 1.0f, 1.0f, 1.0f);
 
 	// GPUSkinning용 Structured Buffer
-	ID3D11ShaderResourceView* GPUSkinMatrixSRV = nullptr;
-	ID3D11ShaderResourceView* GPUSkinNormalMatrixSRV = nullptr;
+	ID3D11ShaderResourceView* ComputeShaderSkinMatrixSRV = nullptr;
+	ID3D11ShaderResourceView* VertexShaderSkinMatrixSRV = nullptr;
+	ID3D11ShaderResourceView* VertexShaderSkinNormalMatrixSRV = nullptr;
 
 	// --- 기본 생성자 ---
 	FMeshBatchElement() = default;

@@ -107,6 +107,86 @@ void USkeletalMesh::CreateStructuredBuffer(ID3D11Buffer** InStructuredBuffer, ID
     }    
 }
 
+void USkeletalMesh::CreateCSInputBuffer(ID3D11Buffer** InStructuredBuffer,
+    ID3D11ShaderResourceView** InShaderResourceView, UINT InElementCount)
+{
+    D3D11_BUFFER_DESC bufferDesc = {};
+    // IMMUTALBE 플래그로 생성과 동시에 정점 데이터 업로드
+    // 절대 변경할 수 없으므로 Update 불필요
+    bufferDesc.Usage = D3D11_USAGE_IMMUTABLE;
+    bufferDesc.ByteWidth = sizeof(FSkinnedVertex) * InElementCount;
+    bufferDesc.BindFlags = D3D11_BIND_SHADER_RESOURCE;
+    bufferDesc.CPUAccessFlags = 0;
+    bufferDesc.MiscFlags = D3D11_RESOURCE_MISC_BUFFER_STRUCTURED;
+    bufferDesc.StructureByteStride = sizeof(FSkinnedVertex);
+
+    D3D11_SUBRESOURCE_DATA InitData = {};
+    InitData.pSysMem = Data->Vertices.GetData();
+   
+    ID3D11Device* Device = GEngine.GetRHIDevice()->GetDevice();
+    HRESULT hr = Device->CreateBuffer(&bufferDesc, &InitData, InStructuredBuffer);
+    if (FAILED(hr))
+    {
+        UE_LOG("[USkeletalMesh/CreateCSInputBuffer] Structured buffer ceation fail");
+        return;
+    }
+
+    D3D11_SHADER_RESOURCE_VIEW_DESC SRVDesc = {};
+    SRVDesc.Format = DXGI_FORMAT_UNKNOWN;
+    SRVDesc.ViewDimension = D3D11_SRV_DIMENSION_BUFFER;
+    SRVDesc.Buffer.NumElements = InElementCount;
+
+    hr = Device->CreateShaderResourceView(*InStructuredBuffer, &SRVDesc, InShaderResourceView);
+    if (FAILED(hr))
+    {
+        UE_LOG("[USkeletalMesh/CreateCSInputBuffer] Structured bufferSRV ceation fail");
+        return;
+    }
+}
+
+void USkeletalMesh::CreateCSOutputBuffer(ID3D11Buffer** InStructuredBuffer,
+    ID3D11UnorderedAccessView** InUnorderedAccessView, ID3D11ShaderResourceView** InShaderResourceView,
+    UINT InElementCount)
+{
+    D3D11_BUFFER_DESC BufferDesc = {};
+    BufferDesc.Usage = D3D11_USAGE_DEFAULT;
+    BufferDesc.ByteWidth = sizeof(FNormalVertex) * InElementCount;
+    BufferDesc.BindFlags = D3D11_BIND_UNORDERED_ACCESS | D3D11_BIND_SHADER_RESOURCE;
+    BufferDesc.MiscFlags = D3D11_RESOURCE_MISC_BUFFER_STRUCTURED;
+    BufferDesc.StructureByteStride = sizeof(FNormalVertex);
+
+    ID3D11Device* Device = GEngine.GetRHIDevice()->GetDevice();
+    HRESULT hr = Device->CreateBuffer(&BufferDesc, nullptr, InStructuredBuffer);
+    if (FAILED(hr))
+    {
+        UE_LOG("[USkeletalMesh/CreateCSOutputBuffer] Structured buffer ceation fail");
+        return;
+    }
+
+    D3D11_UNORDERED_ACCESS_VIEW_DESC UAVDesc = {};    
+    UAVDesc.Format = DXGI_FORMAT_UNKNOWN;
+    UAVDesc.ViewDimension = D3D11_UAV_DIMENSION_BUFFER;
+    UAVDesc.Buffer.NumElements = InElementCount;
+
+    hr = Device->CreateUnorderedAccessView(*InStructuredBuffer, &UAVDesc, InUnorderedAccessView);
+    if (FAILED(hr))
+    {
+        UE_LOG("[USkeletalMesh/CreateCSOutputBuffer] Structured bufferUAV ceation fail");
+        return;
+    }
+
+    D3D11_SHADER_RESOURCE_VIEW_DESC SRVDesc = {};
+    SRVDesc.Format = DXGI_FORMAT_UNKNOWN;
+    SRVDesc.ViewDimension = D3D11_SRV_DIMENSION_BUFFER;
+    SRVDesc.Buffer.NumElements = InElementCount;
+    hr = Device->CreateShaderResourceView(*InStructuredBuffer, &SRVDesc, InShaderResourceView);
+    if (FAILED(hr))
+    {
+        UE_LOG("[USkeletalMesh/CreateCSOutputBuffer] Structured bufferSRV ceation fail");
+        return;
+    }
+}
+
 void USkeletalMesh::BuildLocalAABBs()
 {
     if (!Data || Data->Vertices.IsEmpty() || Data->Skeleton.Bones.IsEmpty())

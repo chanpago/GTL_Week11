@@ -230,6 +230,7 @@ bool UShader::CompileVariantInternal(ID3D11Device* InDevice, const FString& InSh
 	HRESULT Hr;
 	bool bVsCompiled = false;
 	bool bPsCompiled = false;
+	bool bCsCompiled = false;
 
 	// --- 3. 컴파일 결과를 OutVariant에 저장 ---
 	if (EndsWith(InShaderPath, "_VS.hlsl"))
@@ -248,6 +249,15 @@ bool UShader::CompileVariantInternal(ID3D11Device* InDevice, const FString& InSh
 		if (bPsCompiled)
 		{
 			Hr = InDevice->CreatePixelShader(OutVariant.PSBlob->GetBufferPointer(), OutVariant.PSBlob->GetBufferSize(), nullptr, &OutVariant.PixelShader);
+			assert(SUCCEEDED(Hr));
+		}
+	}
+	else if (EndsWith(InShaderPath, "_CS.hlsl"))
+	{
+		bCsCompiled = CompileShaderInternal(WFilePath, "mainCS", "cs_5_0", CompileFlags, Defines.data(), &OutVariant.CSBlob);
+		if (bCsCompiled)
+		{
+			Hr = InDevice->CreateComputeShader(OutVariant.CSBlob->GetBufferPointer(), OutVariant.CSBlob->GetBufferSize(), nullptr, &OutVariant.ComputeShader);
 			assert(SUCCEEDED(Hr));
 		}
 	}
@@ -273,7 +283,7 @@ bool UShader::CompileVariantInternal(ID3D11Device* InDevice, const FString& InSh
 	//OutVariant.SourceMacros = InMacros;
 
 	// 5. 컴파일 성공 여부 반환 (VS 또는 PS 둘 중 하나라도 성공 시)
-	return bVsCompiled || bPsCompiled;
+	return bVsCompiled || bPsCompiled || bCsCompiled;
 }
 
 //FShaderVariant* UShader::GetShaderVariant(const TArray<FShaderMacro>& InMacros)
@@ -312,11 +322,26 @@ ID3D11PixelShader* UShader::GetPixelShader(const TArray<FShaderMacro>& InMacros)
 	return nullptr;
 }
 
+ID3D11ComputeShader* UShader::GetComputeShader(const TArray<FShaderMacro>& InMacros)
+{
+	FShaderVariant* Variant = GetOrCompileShaderVariant(InMacros);
+	if (Variant)
+	{
+		return Variant->ComputeShader;
+	}
+
+	return nullptr;
+}
+
 void UShader::CreateInputLayout(ID3D11Device* Device, const FString& InShaderPath, FShaderVariant& InOutVariant)
 {
 	TArray<D3D11_INPUT_ELEMENT_DESC> descArray = UResourceManager::GetInstance().GetProperInputLayout(InShaderPath);
 
-	if (HasMacro(InOutVariant.SourceMacros, "USE_GPU_SKINNING"))
+	if (HasMacro(InOutVariant.SourceMacros, "USE_COMPUTE_SKINNING"))
+	{
+		descArray.Empty();		
+	}
+	else if (HasMacro(InOutVariant.SourceMacros, "USE_VERTEX_SKINNING"))
 	{
 		descArray.Add({"BLENDINDICES", 0, DXGI_FORMAT_R32G32B32A32_UINT, 0, D3D11_APPEND_ALIGNED_ELEMENT, D3D11_INPUT_PER_VERTEX_DATA, 0});
 		descArray.Add({"BLENDWEIGHT", 0, DXGI_FORMAT_R32G32B32A32_FLOAT, 0, D3D11_APPEND_ALIGNED_ELEMENT, D3D11_INPUT_PER_VERTEX_DATA, 0});
@@ -335,6 +360,11 @@ void UShader::CreateInputLayout(ID3D11Device* Device, const FString& InShaderPat
 			InOutVariant.VSBlob->GetBufferSize(),
 			&InOutVariant.InputLayout);
 		assert(SUCCEEDED(hr));
+	}
+	else
+	{
+		// 명시적으로 nullptr 설정
+		InOutVariant.InputLayout = nullptr;
 	}
 }
 

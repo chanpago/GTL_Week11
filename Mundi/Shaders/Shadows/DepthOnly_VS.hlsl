@@ -1,5 +1,9 @@
-#ifndef USE_GPU_SKINNING
-#define USE_GPU_SKINNING 0
+#ifndef USE_COMPUTE_SKINNING
+#define USE_COMPUTE_SKINNING 0
+#endif
+
+#ifndef USE_VERTEX_SKINNING
+#define USE_VERTEX_SKINNING 0
 #endif
 
 // b0: ModelBuffer (VS) - ModelBufferType과 정확히 일치 (128 bytes)
@@ -18,23 +22,40 @@ cbuffer ViewProjBuffer : register(b1)
     row_major float4x4 InverseProjectionMatrix; 
 };
 
-#if USE_GPU_SKINNING
+#if USE_COMPUTE_SKINNING
+struct FSkinnedVertexInput
+{
+    float3 Position;
+    float3 Normal;
+    float2 TexCoord;
+    float4 Tangent;
+    float4 Color;
+};
+StructuredBuffer<FSkinnedVertexInput> g_SkinnedVertices : register(t12);
+#elif USE_VERTEX_SKINNING
 StructuredBuffer<float4x4> g_SkinnedMatrices : register(t12);
-StructuredBuffer<float4x4> g_SkinnedNormalMatrices : register(t13);
 #endif
 
 // --- 셰이더 입출력 구조체 ---
 struct VS_INPUT
 {
+#if USE_COMPUTE_SKINNING    
+    // Compute Shader Skinning은 입력이 없다
+#elif USE_VERTEX_SKINNING
     float3 Position : POSITION;
     float3 Normal : NORMAL0;
     float2 TexCoord : TEXCOORD0;
     float4 Tangent : TANGENT0;
     float4 Color : COLOR;
-#if USE_GPU_SKINNING
     uint4 BoneIndices : BLENDINDICES0;
     float4 BoneWeights : BLENDWEIGHT0;
-#endif
+#else
+    float3 Position : POSITION;
+    float3 Normal : NORMAL0;
+    float2 TexCoord : TEXCOORD0;
+    float4 Tangent : TANGENT0;
+    float4 Color : COLOR;
+#endif    
 };
 
 // 출력은 오직 클립 공간 위치만 필요
@@ -44,7 +65,7 @@ struct VS_OUT
     float3 WorldPosition : TEXCOORD0;
 };
 
-#if USE_GPU_SKINNING
+#if USE_VERTEX_SKINNING
 float3 SkinPosition(float3 Position, uint4 BoneIndices, float4 BoneWeights)
 {
     float4 SkinnedPos = 0.0f;
@@ -61,14 +82,18 @@ float3 SkinPosition(float3 Position, uint4 BoneIndices, float4 BoneWeights)
 }
 #endif
 
-VS_OUT mainVS(VS_INPUT Input)
+VS_OUT mainVS(VS_INPUT Input, uint VertexID : SV_VertexID)
 {
     VS_OUT Output = (VS_OUT) 0;
 
-#if USE_GPU_SKINNING
-    float3 SkinnedPos = SkinPosition(Input.Position, Input.BoneIndices, Input.BoneWeights);
+    float3 SkinnedPos;
+
+#if USE_COMPUTE_SKINNING
+    SkinnedPos = g_SkinnedVertices[VertexID].Position;
+#elif USE_VERTEX_SKINNING
+    SKinnedPos = SkinPosition(Input.Position, Input.BoneIndices, Input.BoneWeights);
 #else
-    float3 SkinnedPos = Input.Position;
+    SkinnedPos = Input.Position;
 #endif    
     
     // 모델 좌표 -> 월드 좌표 -> 뷰 좌표 -> 클립 좌표

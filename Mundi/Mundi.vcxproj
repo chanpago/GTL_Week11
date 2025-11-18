@@ -257,6 +257,13 @@
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release_StandAlone|x64'">Create</PrecompiledHeader>
     </ClCompile>
     <ClCompile Include="main.cpp" />
+    <FxCompile Include="Shaders\Skinning\SkinnedMesh_CS.hlsl">
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">true</ExcludedFromBuild>
+      <FileType>Document</FileType>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release_StandAlone|x64'">true</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|x64'">true</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug_StandAlone|x64'">true</ExcludedFromBuild>
+    </FxCompile>
     <ClCompile Include="Source\Editor\BlueprintGraph\BlueprintActionDatabase.cpp" />
     <ClCompile Include="Source\Editor\BlueprintGraph\BlueprintEvaluator.cpp" />
     <ClCompile Include="Source\Editor\BlueprintGraph\BlueprintTypes.cpp" />
